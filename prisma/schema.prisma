@@ -1,0 +1,377 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+////////////////////////////////////////////////////
+/// ENUMS
+////////////////////////////////////////////////////
+
+enum MatterType {
+  LITIGATION
+  NON_LITIGATION
+}
+
+enum MatterStatus {
+  OPEN
+  IN_PROGRESS
+  CLOSED
+  ARCHIVED
+}
+
+enum BillingType {
+  HOURLY
+  FIXED
+  RETAINER
+}
+
+enum TaskStatus {
+  TODO
+  DOING
+  DONE
+}
+
+////////////////////////////////////////////////////
+/// TENANT / ORGANIZATION
+////////////////////////////////////////////////////
+
+model Organization {
+  id        BigInt   @id @default(autoincrement())
+  name      String
+  plan      String?
+  createdAt DateTime @default(now())
+
+  users    User[]
+  contacts Contact[]
+  matters  Matter[]
+  accounts BankAccount[]
+  logs     ActivityLog[]
+}
+
+////////////////////////////////////////////////////
+/// AUTH
+////////////////////////////////////////////////////
+
+model User {
+  id             BigInt   @id @default(autoincrement())
+  organizationId BigInt
+  name           String
+  email          String   @unique
+  passwordHash   String
+  hourlyRate     Decimal  @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  organization  Organization   @relation(fields: [organizationId], references: [id])
+  matterMembers MatterMember[]
+  activityLogs  ActivityLog[]
+  notifications Notification[]
+
+  roles       UserRole[]
+  sessions    Session[]
+  loginLogs   LoginLog[]
+  tasks       Task[]
+  timeEntries TimeEntry[]
+  documents   Document[]
+}
+
+model Role {
+  id   BigInt @id @default(autoincrement())
+  name String @unique
+
+  users       UserRole[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id   BigInt @id @default(autoincrement())
+  code String @unique
+
+  roles RolePermission[]
+}
+
+model UserRole {
+  userId BigInt
+  roleId BigInt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model RolePermission {
+  roleId       BigInt
+  permissionId BigInt
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model Session {
+  id        BigInt    @id @default(autoincrement())
+  userId    BigInt
+  token     String
+  expiredAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model LoginLog {
+  id        BigInt   @id @default(autoincrement())
+  userId    BigInt
+  ipAddress String?
+  loginAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+////////////////////////////////////////////////////
+/// CONTACTS
+////////////////////////////////////////////////////
+
+model ContactType {
+  id    BigInt @id @default(autoincrement())
+  label String
+
+  contacts Contact[]
+}
+
+model Contact {
+  id             BigInt   @id @default(autoincrement())
+  organizationId BigInt
+  typeId         BigInt?
+  name           String
+  createdAt      DateTime @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  type            ContactType? @relation(fields: [typeId], references: [id])
+  mattersAsClient Matter[]
+
+  details ContactDetail?
+  matters MatterParty[]
+}
+
+model ContactDetail {
+  contactId BigInt  @id
+  address   String?
+  phone     String?
+  taxNumber String?
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+}
+
+////////////////////////////////////////////////////
+/// MATTERS (CORE HUB)
+////////////////////////////////////////////////////
+
+model Matter {
+  id             BigInt       @id @default(autoincrement())
+  organizationId BigInt
+  clientId       BigInt?
+  title          String
+  type           MatterType
+  status         MatterStatus
+  billingType    BillingType
+  createdAt      DateTime     @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  client       Contact?     @relation(fields: [clientId], references: [id])
+
+  members     MatterMember[]
+  parties     MatterParty[]
+  tasks       Task[]
+  documents   Document[]
+  timeEntries TimeEntry[]
+  expenses    Expense[]
+  invoices    Invoice[]
+  events      CalendarEvent[]
+}
+
+model MatterMember {
+  matterId BigInt
+  userId   BigInt
+  role     String?
+
+  matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@id([matterId, userId])
+}
+
+model MatterParty {
+  matterId  BigInt
+  contactId BigInt
+  partyRole String?
+
+  matter  Matter  @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  contact Contact @relation(fields: [contactId], references: [id])
+
+  @@id([matterId, contactId])
+}
+
+////////////////////////////////////////////////////
+/// TASKS & CALENDAR
+////////////////////////////////////////////////////
+
+model Task {
+  id          BigInt     @id @default(autoincrement())
+  matterId    BigInt
+  assignedTo  BigInt?
+  title       String
+  description String?
+  status      TaskStatus
+  dueDate     DateTime?
+
+  matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [assignedTo], references: [id])
+}
+
+model CalendarEvent {
+  id       BigInt   @id @default(autoincrement())
+  matterId BigInt
+  title    String
+  startAt  DateTime
+  endAt    DateTime
+
+  matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
+}
+
+////////////////////////////////////////////////////
+/// DOCUMENTS (VERSIONING)
+////////////////////////////////////////////////////
+
+model Document {
+  id        BigInt   @id @default(autoincrement())
+  matterId  BigInt
+  ownerId   BigInt
+  name      String
+  createdAt DateTime @default(now())
+
+  matter Matter @relation(fields: [matterId], references: [id])
+  owner  User   @relation(fields: [ownerId], references: [id])
+
+  versions DocumentVersion[]
+}
+
+model DocumentVersion {
+  id         BigInt   @id @default(autoincrement())
+  documentId BigInt
+  filePath   String
+  versionNo  Int
+  uploadedAt DateTime @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+}
+
+////////////////////////////////////////////////////
+/// BILLING
+////////////////////////////////////////////////////
+
+model TimeEntry {
+  id        BigInt   @id @default(autoincrement())
+  matterId  BigInt
+  userId    BigInt
+  hours     Decimal
+  rate      Decimal
+  billable  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  matter       Matter        @relation(fields: [matterId], references: [id])
+  user         User          @relation(fields: [userId], references: [id])
+  invoiceItems InvoiceItem[]
+}
+
+model Expense {
+  id          BigInt   @id @default(autoincrement())
+  matterId    BigInt
+  description String
+  amount      Decimal
+  createdAt   DateTime @default(now())
+
+  matter       Matter        @relation(fields: [matterId], references: [id])
+  invoiceItems InvoiceItem[]
+}
+
+model Invoice {
+  id        BigInt    @id @default(autoincrement())
+  matterId  BigInt
+  total     Decimal   @default(0)
+  status    String
+  dueDate   DateTime?
+  createdAt DateTime  @default(now())
+
+  matter Matter @relation(fields: [matterId], references: [id])
+
+  items    InvoiceItem[]
+  payments Payment[]
+}
+
+model InvoiceItem {
+  id          BigInt  @id @default(autoincrement())
+  invoiceId   BigInt
+  timeEntryId BigInt?
+  expenseId   BigInt?
+  amount      Decimal
+  description String?
+
+  invoice   Invoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  timeEntry TimeEntry? @relation(fields: [timeEntryId], references: [id])
+  expense   Expense?   @relation(fields: [expenseId], references: [id])
+}
+
+model Payment {
+  id        BigInt   @id @default(autoincrement())
+  invoiceId BigInt
+  amount    Decimal
+  paidAt    DateTime
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+}
+
+model BankAccount {
+  id             BigInt @id @default(autoincrement())
+  organizationId BigInt
+  bankName       String
+  accountNumber  String
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+}
+
+////////////////////////////////////////////////////
+/// AUDIT & SYSTEM
+////////////////////////////////////////////////////
+
+model ActivityLog {
+  id             BigInt   @id @default(autoincrement())
+  organizationId BigInt
+  userId         BigInt?
+  entity         String
+  entityId       BigInt
+  action         String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  user         User?        @relation(fields: [userId], references: [id])
+}
+
+model Notification {
+  id      BigInt    @id @default(autoincrement())
+  userId  BigInt
+  message String
+  readAt  DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+}
