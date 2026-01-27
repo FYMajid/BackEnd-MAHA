@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import { errorHandler } from "./middleware/error";
 import { logger } from "./middleware/logger";
+import userController from "./app/user/controller";
 
 (BigInt.prototype as any).toJSON = function () {
   return this.toString();
@@ -23,6 +24,8 @@ app.use(
 app.use(express.json());
 app.use(logger);
 app.use(errorHandler);
+
+app.use("/api/users", userController);
 
 app.listen(PORT, () => {
   console.log(`Server running on port http://localhost:${PORT}`);
