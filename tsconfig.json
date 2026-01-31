@@ -12,7 +12,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "types": ["node"],
-    "typeRoots": ["./node_modules/@types"]
+    "typeRoots": ["./node_modules/@types", "./src/types"]
   },
-  "include": ["src/**/*.ts", "prisma/**/*.ts", "prisma.config.ts"]
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "prisma/**/*.ts", "prisma.config.ts"]
 }

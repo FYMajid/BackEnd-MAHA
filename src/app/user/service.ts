@@ -2,16 +2,34 @@ import { CreateUserDTO, UpdateUserDTO } from "./dto";
 import { prisma } from "../../lib/prisma";
 import bcrypt from "bcrypt";
 
-export const createUser = async (dto: CreateUserDTO) => {
-  const passwordHash = await bcrypt.hash(dto.password, 10);
+const userSelect = {
+  id: true,
+  organizationId: true,
+  name: true,
+  email: true,
+  hourlyRate: true,
+  isActive: true,
+  createdAt: true,
+  roles: {
+    select: {
+      role: true,
+    },
+  },
+};
 
-  const user = await prisma.user.create({
+export const createUser = async (dto: CreateUserDTO) => {
+  const passwordHash = await bcrypt.hash(dto.password, 12);
+
+  const created = await prisma.user.create({
     data: {
       organizationId: dto.organizationId,
       name: dto.name,
       email: dto.email,
       passwordHash,
       hourlyRate: dto.hourlyRate ?? 0,
+    },
+    select: {
+      id: true,
     },
   });
 
@@ -22,50 +40,50 @@ export const createUser = async (dto: CreateUserDTO) => {
 
     await prisma.userRole.createMany({
       data: roles.map((r) => ({
-        userId: user.id,
+        userId: created.id,
         roleId: r.id,
       })),
     });
   }
 
-  return user;
+  return prisma.user.findUnique({
+    where: { id: created.id },
+    select: userSelect,
+  });
 };
 
-export const loginUser = async (email: string, password: string) => {
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user) {
-    throw new Error("User not found");
-  }
-  const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
-  if (!isPasswordValid) {
-    throw new Error("Invalid password");
-  }
-  return user;
-};
+export const listUsers = async () =>
+  prisma.user.findMany({
+    select: userSelect,
+  });
 
 export const getUsersByOrg = async (organizationId: bigint) =>
   prisma.user.findMany({
     where: { organizationId },
-    include: { roles: { include: { role: true } } },
+    select: userSelect,
   });
 
 export const getUserById = async (id: bigint) =>
   prisma.user.findUnique({
     where: { id },
-    include: { roles: { include: { role: true } } },
+    select: userSelect,
   });
 
 export const updateUser = async (id: bigint, dto: UpdateUserDTO) => {
   const data: any = { ...dto };
 
   if (dto.password) {
-    data.passwordHash = await bcrypt.hash(dto.password, 10);
+    data.passwordHash = await bcrypt.hash(dto.password, 12);
     delete data.password;
   }
+  if (dto.roleNames) {
+    delete data.roleNames;
+  }
 
-  const user = await prisma.user.update({
+  const updated = await prisma.user.update({
     where: { id },
     data,
+    select: { id: true },
   });
 
   if (dto.roleNames) {
@@ -83,7 +101,10 @@ export const updateUser = async (id: bigint, dto: UpdateUserDTO) => {
     });
   }
 
-  return user;
+  return prisma.user.findUnique({
+    where: { id: updated.id },
+    select: userSelect,
+  });
 };
 
 export const deleteUser = async (id: bigint) =>
