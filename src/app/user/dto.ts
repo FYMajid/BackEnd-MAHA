@@ -1,17 +1,16 @@
-export interface CreateUserDTO {
-  organizationId: bigint;
-  name: string;
+export interface UserDto {
+  firstName: string;
+  middleName?: string;
+  lastName: string;
   email: string;
+  phoneNumbe: string;
   password: string;
-  hourlyRate?: number;
-  roleNames?: string[];
+  address: string;
+  position: string;
 }
 
-export interface UpdateUserDTO {
-  name?: string;
-  email?: string;
-  password?: string;
-  hourlyRate?: number;
-  isActive?: boolean;
-  roleNames?: string[];
+export enum Posistion {
+  CLIENT = "CLIENT",
+  SENIOR_LAWYER = "SENIOR_LAWYER",
+  JUNIOR_LAWYER = "JUNIOR_LAWYER",
 }

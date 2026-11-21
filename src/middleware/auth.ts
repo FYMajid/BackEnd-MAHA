@@ -1,53 +1,44 @@
 import { NextFunction, Request, Response } from "express";
-import { verifyAccessToken } from "../lib/auth";
+import jwt from "jsonwebtoken";
+import { prisma } from "../lib/prisma";
+const SECRET_KEY = process.env.JWT_SECRET || "secretkey";
 
-const publicRoutes = new Set([
-  "POST /api/users/register",
-  "POST /api/users/login",
-  "POST /api/auth/refresh",
-  "POST /api/auth/logout",
-]);
+export const authenticateJWT = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  const authHeader = req.headers.authorization;
 
-const isPublicRoute = (req: Request) => {
-  const path = `${req.baseUrl}${req.path}`;
-  return publicRoutes.has(`${req.method.toUpperCase()} ${path}`);
-};
-
-export const authMiddleware = (req: Request, res: Response, next: NextFunction) => {
-  if (isPublicRoute(req)) {
-    return next();
+  if (!authHeader?.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
-  const header = req.headers.authorization ?? "";
-  const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-
-  if (!token) {
-    return res.status(401).json({
-      success: false,
-      message: "Unauthorized",
-    });
-  }
+  const token = authHeader.split(" ")[1];
 
   try {
-    const payload = verifyAccessToken(token);
-    const userId = payload.sub ? BigInt(String(payload.sub)) : null;
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid token",
-      });
+    const decoded = jwt.verify(token, SECRET_KEY) as { id: string };
+
+    // 🔥 ambil data lengkap dari DB
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        position: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(401).json({ error: "User not found" });
     }
 
-    req.auth = {
-      userId,
-      organizationId: payload.orgId ? BigInt(String(payload.orgId)) : undefined,
-    };
+    // 🔥 sekarang type cocok 100%
+    req.user = user;
 
-    return next();
+    next();
   } catch {
-    return res.status(401).json({
-      success: false,
-      message: "Invalid token",
-    });
+    return res.status(401).json({ error: "Invalid or expired token" });
   }
 };

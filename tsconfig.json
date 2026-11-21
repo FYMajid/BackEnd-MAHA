@@ -1,9 +1,11 @@
 {
   "compilerOptions": {
+    "ignoreDeprecations": "6.0",
     "target": "ES2020",
     "module": "CommonJS",
     "moduleResolution": "node",
     "outDir": "dist",
+    "rootDir": "./src",
     "baseUrl": "src",
     "paths": {
       "@/*": ["*"]
@@ -11,8 +13,7 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["node"],
     "typeRoots": ["./node_modules/@types", "./src/types"]
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "prisma/**/*.ts", "prisma.config.ts"]
+  "include": ["src"]
 }

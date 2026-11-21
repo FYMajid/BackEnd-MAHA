@@ -1,94 +1,27 @@
 import express, { NextFunction, Request, Response } from "express";
 import * as userService from "./service";
-import * as authService from "../auth/service";
-import { createUserSchema, loginSchema, updateUserSchema } from "./schema";
-import {
-  refreshTokenCookieName,
-  refreshTokenCookieOptions,
-} from "../../lib/cookies";
+import { authenticateJWT } from "../../middleware/auth";
 
 const router = express.Router();
 
-router.post(
-  "/register",
+router.get(
+  "/me",
+  authenticateJWT,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const dto = createUserSchema.parse(req.body);
-      const user = await userService.createUser(dto);
-      res.status(201).json(user);
-    } catch (error) {
-      next(error);
-    }
-  },
-);
+      // Check if req.user exists
+      if (!req.user) {
+        res.status(401).json({ message: "Unauthorized" });
+        return;
+      }
 
-router.post(
-  "/login",
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const dto = loginSchema.parse(req.body);
-      const result = await authService.login(
-        dto.email,
-        dto.password,
-        req.ip,
-      );
-      res.cookie(
-        refreshTokenCookieName,
-        result.refreshToken,
-        refreshTokenCookieOptions,
-      );
-      res.json({ accessToken: result.accessToken, user: result.user });
-    } catch (error) {
-      next(error);
-    }
-  },
-);
+      // Now TypeScript knows req.user is defined
+      const userId = req.user.id;
 
-router.get("/", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const organizationId = req.query.organizationId;
-    if (organizationId) {
-      const users = await userService.getUsersByOrg(
-        BigInt(String(organizationId)),
-      );
-      res.json(users);
-      return;
-    }
-    const users = await userService.listUsers();
-    res.json(users);
-  } catch (error) {
-    next(error);
-  }
-});
+      // Fetch complete user data from database
+      const completeUserData = await userService.getCurrentUser(userId);
 
-router.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const id = BigInt(String(req.params.id));
-    const user = await userService.getUserById(id);
-    res.json(user);
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.put("/:id", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const id = BigInt(String(req.params.id));
-    const dto = updateUserSchema.parse(req.body);
-    const user = await userService.updateUser(id, dto);
-    res.json(user);
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.delete(
-  "/:id",
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const id = BigInt(String(req.params.id));
-      await userService.deleteUser(id);
-      res.status(204).send();
+      res.json({ message: "This is your profile", user: completeUserData });
     } catch (error) {
       next(error);
     }
@@ -96,3 +29,16 @@ router.delete(
 );
 
 export default router;
+
+/**
+ * @swagger
+ * /api/user/me:
+ *   get:
+ *     summary: Get current logged in user
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Current user profile
+ */

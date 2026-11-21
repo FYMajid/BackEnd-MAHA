@@ -1,13 +1,17 @@
 import "express";
+import { Role, Position } from "@prisma/client";
 
 declare global {
   namespace Express {
     interface Request {
-      auth?: {
-        userId: bigint;
-        organizationId?: bigint;
-        permissions?: string[];
+      user?: {
+        id: string;
+        email: string;
+        role: Role;
+        position: Position;
       };
+
+      file?: Express.Multer.File;
     }
   }
 }

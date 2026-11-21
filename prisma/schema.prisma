@@ -12,365 +12,394 @@ datasource db {
   provider = "postgresql"
 }
 
-////////////////////////////////////////////////////
-/// ENUMS
-////////////////////////////////////////////////////
+enum Position {
+  CLIENT
+  SENIOR_LAWYER
+  JUNIOR_LAWYER
+}
 
-enum MatterType {
-  LITIGATION
-  NON_LITIGATION
+enum Role {
+  USER
+  ADMIN
+}
+
+enum ClientStatus {
+  CLIENT
+  NON_CLIENT
+}
+
+enum DocumentType {
+  FILE
+  FOLDER
 }
 
 enum MatterStatus {
-  OPEN
-  IN_PROGRESS
-  CLOSED
-  ARCHIVED
-}
-
-enum BillingType {
-  HOURLY
-  FIXED
-  RETAINER
-}
-
-enum TaskStatus {
-  TODO
-  DOING
   DONE
+  IN_PROGRESS
+  PENDING
 }
 
-////////////////////////////////////////////////////
-/// TENANT / ORGANIZATION
-////////////////////////////////////////////////////
+enum CostJournalEntryType {
+  EXPENSE
+  TIME
+}
 
-model Organization {
-  id        BigInt   @id @default(autoincrement())
-  name      String
-  plan      String?
-  createdAt DateTime @default(now())
+enum CostJournalBillingType {
+  BILLABLE
+  NON_BILLABLE
+}
 
-  users    User[]
-  contacts Contact[]
-  matters  Matter[]
-  accounts BankAccount[]
-  logs     ActivityLog[]
+enum InvoiceStatus {
+  DRAFT
+  PENDING
+  PAID
+  OVERDUE
+}
+
+enum PaymentProofStatus {
+  PENDING
+  VERIFIED
+}
+
+enum DepositActionType {
+  ADD
+  REFUND
 }
 
 ////////////////////////////////////////////////////
 /// AUTH
 ////////////////////////////////////////////////////
+  model User {
+    id String @id @default(uuid())
 
-model User {
-  id             BigInt   @id @default(autoincrement())
-  organizationId BigInt
-  name           String
-  email          String   @unique
-  passwordHash   String
-  hourlyRate     Decimal  @default(0)
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
+    firstName  String
+    middleName String?
+    lastName   String
 
-  organization  Organization   @relation(fields: [organizationId], references: [id])
-  matterMembers MatterMember[]
-  activityLogs  ActivityLog[]
-  notifications Notification[]
+    email      String @unique
+    phoneNumber String @unique
+    password    String
+    address     String?
+    position    Position   @default(CLIENT)
+    role        Role  @default(USER)
 
-  roles       UserRole[]
-  sessions    Session[]
-  loginLogs   LoginLog[]
-  tasks       Task[]
-  timeEntries TimeEntry[]
-  documents   Document[]
-}
 
-model Role {
-  id   BigInt @id @default(autoincrement())
-  name String @unique
+    matters Matter[] @relation("AttorneyMatters")
+    createdAt DateTime @default(now())
+  }
 
-  users       UserRole[]
-  permissions RolePermission[]
-}
-
-model Permission {
-  id   BigInt @id @default(autoincrement())
-  code String @unique
-
-  roles RolePermission[]
-}
-
-model UserRole {
-  userId BigInt
-  roleId BigInt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
-
-  @@id([userId, roleId])
-}
-
-model RolePermission {
-  roleId       BigInt
-  permissionId BigInt
-
-  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
-
-  @@id([roleId, permissionId])
-}
-
-model Session {
-  id        BigInt    @id @default(autoincrement())
-  userId    BigInt
-  token     String
-  expiredAt DateTime?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model LoginLog {
-  id        BigInt   @id @default(autoincrement())
-  userId    BigInt
-  ipAddress String?
-  loginAt   DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id])
-}
 
 ////////////////////////////////////////////////////
-/// CONTACTS
+/// CONTACT
 ////////////////////////////////////////////////////
-
-model ContactType {
-  id    BigInt @id @default(autoincrement())
-  label String
-
-  contacts Contact[]
-}
 
 model Contact {
-  id             BigInt   @id @default(autoincrement())
-  organizationId BigInt
-  typeId         BigInt?
-  name           String
-  createdAt      DateTime @default(now())
+  id                String            @id @default(uuid())
+  isClient          ClientStatus      @default(CLIENT)
+  contactType       String            // Contoh: "Limited Liability Company", "Cooperative"
+  name              String
+  image             String?
+  email             String?
+  phoneNumber       String?
+  address           String?
+  additionalInfo    String?
+  creator           String
+  createdAt         DateTime          @default(now())
 
-  organization    Organization @relation(fields: [organizationId], references: [id])
-  type            ContactType? @relation(fields: [typeId], references: [id])
-  mattersAsClient Matter[]
+  // Relasi One-to-One ke 3 Kategori Utama
+  personalDetail    PersonalDetail?
+  businessDetail    BusinessDetail?
+  organizationDetail OrganizationDetail?
 
-  details ContactDetail?
-  matters MatterParty[]
+  documents          Document[]          @relation("ContactDocuments")
+  matters Matter[] @relation("ClientMatters")
+  relatedMatters MatterRelatedContact[]
+  invoices          Invoice[]           @relation("ContactInvoices")
+  depositAccounts   DepositAccount[]    @relation("ContactDepositAccounts")
 }
 
-model ContactDetail {
-  contactId BigInt  @id
-  address   String?
-  phone     String?
-  taxNumber String?
+model PersonalDetail {
+  id                String   @id @default(uuid())
+  contactId         String   @unique
+  contact           Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  citizenship       String?
+  identificationNo  String?
+  office_position   String?
+  gender            String?
+  birthDate         DateTime?
+  religion          String?
+}
 
-  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+model BusinessDetail {
+  id                String   @id @default(uuid())
+  contactId         String   @unique
+  contact           Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  businessType      String?
+  taxCode           String?
+  commissioners     String?
+  directors         String?
+  shareholders      String?
+  lawyers           String?
+}
+
+model OrganizationDetail {
+  id                String   @id @default(uuid())
+  contactId         String   @unique
+  contact           Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  structureType     String?  // Untuk membedakan tipe Foundation/Cooperative
+  taxCode           String?
+  maintainers       String?
+  mentors           String?
+  supervisors       String?
+  members           String?
+  lawyers           String?
+}
+
+
+////////////////////////////////////////////////////
+/// DOCUMENT  
+////////////////////////////////////////////////////
+
+
+
+model Document {
+  id                    String   @id @default(uuid())
+  type                  DocumentType
+  name                  String   
+
+  parentId              String?
+  parent                Document? @relation("DocumentHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children              Document[] @relation("DocumentHierarchy")
+  
+  // Foreign Key ke Contact
+  contactId             String?
+  contact               Contact?   @relation("ContactDocuments", fields: [contactId], references: [id], onDelete: SetNull)
+  
+  // Foreign Key ke Matter (Jika Anda sudah punya model Matter)
+  matterId              String?
+  matter        Matter?  @relation(fields: [matterId], references: [id], onDelete: SetNull)
+  // matter             Matter?    @relation(fields: [matterId], references: [id])
+
+  physicalLocation      String?
+  hyperlink             String?
+  description           String?  @db.Text
+  createdAt             DateTime @default(now()) @map("uploadDate")
+  lastEdit              DateTime @updatedAt
+  fileUrl               String?  
+  fileSize              Int?
+  isDeleted             Boolean  @default(false)
+
+  @@index([parentId])
+  @@index([parentId, name])
+  @@map("documents")
 }
 
 ////////////////////////////////////////////////////
-/// MATTERS (CORE HUB)
+///   MATTER  
 ////////////////////////////////////////////////////
 
 model Matter {
-  id             BigInt       @id @default(autoincrement())
-  organizationId BigInt
-  clientId       BigInt?
-  title          String
-  type           MatterType
-  status         MatterStatus
-  billingType    BillingType
-  createdAt      DateTime     @default(now())
+  id                String       @id @default(uuid())
+  
+  // Matter Information
+  clientId          String
+  client            Contact      @relation("ClientMatters", fields: [clientId], references: [id])
 
-  organization Organization @relation(fields: [organizationId], references: [id])
-  client       Contact?     @relation(fields: [clientId], references: [id])
+  responsibleAttorneyId String
+  responsibleAttorney   User     @relation("AttorneyMatters", fields: [responsibleAttorneyId], references: [id])
+  members           String?      // Bisa dikembangkan menjadi tabel relasi jika perlu multi-user
 
-  members     MatterMember[]
-  parties     MatterParty[]
-  tasks       Task[]
-  documents   Document[]
-  timeEntries TimeEntry[]
-  expenses    Expense[]
-  invoices    Invoice[]
-  events      CalendarEvent[]
+  
+  // Matter Classification
+  caseArea          String
+  caseType          String
+  disputeResolution String
+  description       String?      @db.Text
+  
+  // Detail Location
+  address           String?
+  
+  // Matter Timeline
+  status            MatterStatus @default(PENDING)
+  startDate         DateTime?
+  pendingDate       DateTime?
+  closeDate         DateTime?
+
+  // Additional
+  paymentMethod     String?
+  additionalInfo    String?
+  
+  documents         Document[]
+  events            Event[]
+  costJournals      CostJournal[]
+  relatedContacts   MatterRelatedContact[]
+  invoices          Invoice[]          @relation("MatterInvoices")
+  depositAccounts   DepositAccount[]   @relation("MatterDepositAccounts")
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@map("matters")
 }
 
-model MatterMember {
-  matterId BigInt
-  userId   BigInt
-  role     String?
-
-  matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
-  user   User   @relation(fields: [userId], references: [id])
-
-  @@id([matterId, userId])
-}
-
-model MatterParty {
-  matterId  BigInt
-  contactId BigInt
-  partyRole String?
-
-  matter  Matter  @relation(fields: [matterId], references: [id], onDelete: Cascade)
-  contact Contact @relation(fields: [contactId], references: [id])
-
-  @@id([matterId, contactId])
-}
-
-////////////////////////////////////////////////////
-/// TASKS & CALENDAR
-////////////////////////////////////////////////////
-
-model Task {
-  id          BigInt     @id @default(autoincrement())
-  matterId    BigInt
-  assignedTo  BigInt?
-  title       String
-  description String?
-  status      TaskStatus
-  dueDate     DateTime?
-
-  matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
-  user   User?  @relation(fields: [assignedTo], references: [id])
-}
-
-model CalendarEvent {
-  id       BigInt   @id @default(autoincrement())
-  matterId BigInt
-  title    String
-  startAt  DateTime
-  endAt    DateTime
-
-  matter Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
-}
-
-////////////////////////////////////////////////////
-/// DOCUMENTS (VERSIONING)
-////////////////////////////////////////////////////
-
-model Document {
-  id        BigInt   @id @default(autoincrement())
-  matterId  BigInt
-  ownerId   BigInt
-  name      String
-  createdAt DateTime @default(now())
-
-  matter Matter @relation(fields: [matterId], references: [id])
-  owner  User   @relation(fields: [ownerId], references: [id])
-
-  versions DocumentVersion[]
-}
-
-model DocumentVersion {
-  id         BigInt   @id @default(autoincrement())
-  documentId BigInt
-  filePath   String
-  versionNo  Int
-  uploadedAt DateTime @default(now())
-
-  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-}
-
-////////////////////////////////////////////////////
-/// BILLING
-////////////////////////////////////////////////////
-
-model TimeEntry {
-  id        BigInt   @id @default(autoincrement())
-  matterId  BigInt
-  userId    BigInt
-  hours     Decimal
-  rate      Decimal
-  billable  Boolean  @default(true)
-  createdAt DateTime @default(now())
-
-  matter       Matter        @relation(fields: [matterId], references: [id])
-  user         User          @relation(fields: [userId], references: [id])
-  invoiceItems InvoiceItem[]
-}
-
-model Expense {
-  id          BigInt   @id @default(autoincrement())
-  matterId    BigInt
-  description String
-  amount      Decimal
+model MatterRelatedContact {
+  id          String   @id @default(uuid())
+  matterId    String
+  contactId   String
+  description String?  @db.Text
   createdAt   DateTime @default(now())
 
-  matter       Matter        @relation(fields: [matterId], references: [id])
-  invoiceItems InvoiceItem[]
+  matter  Matter  @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([matterId, contactId])
+  @@map("matter_related_contacts")
+}
+
+model CostJournal {
+  id              String                  @id @default(uuid())
+  matterId        String
+  matter          Matter                  @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  entryType       CostJournalEntryType
+  billingType     CostJournalBillingType  @default(BILLABLE)
+  category        String?
+  entryDate       DateTime
+  description     String?                 @db.Text
+  quantity        Int?
+  unitCost        Int?
+  durationMinutes Int?
+  hourlyRate      Int?
+  totalCost       Int
+  attachmentUrl   String?
+  createdBy       String?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  @@index([matterId])
+  @@index([entryType])
+  @@index([billingType])
+  @@index([entryDate])
+  @@map("cost_journals")
 }
 
 model Invoice {
-  id        BigInt    @id @default(autoincrement())
-  matterId  BigInt
-  total     Decimal   @default(0)
-  status    String
-  dueDate   DateTime?
-  createdAt DateTime  @default(now())
+  id            String        @id @default(uuid())
+  invoiceNo     String        @unique
+  clientId      String
+  client        Contact       @relation("ContactInvoices", fields: [clientId], references: [id], onDelete: Cascade)
+  matterId      String
+  matter        Matter        @relation("MatterInvoices", fields: [matterId], references: [id], onDelete: Cascade)
+  invoiceDate   DateTime
+  dueDate       DateTime
+  paymentTerms  String?
+  description   String?       @db.Text
+  notes         String?       @db.Text
+  subtotal      Int
+  taxPercent    Int           @default(0)
+  taxAmount     Int           @default(0)
+  totalAmount   Int
+  status        InvoiceStatus @default(PENDING)
+  items         InvoiceItem[]
+  paymentProofs PaymentProof[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
-  matter Matter @relation(fields: [matterId], references: [id])
-
-  items    InvoiceItem[]
-  payments Payment[]
+  @@index([clientId])
+  @@index([matterId])
+  @@index([invoiceDate])
+  @@index([status])
+  @@map("invoices")
 }
 
 model InvoiceItem {
-  id          BigInt  @id @default(autoincrement())
-  invoiceId   BigInt
-  timeEntryId BigInt?
-  expenseId   BigInt?
-  amount      Decimal
-  description String?
+  id          String   @id @default(uuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Int
+  rate        Int
+  amount      Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  invoice   Invoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  timeEntry TimeEntry? @relation(fields: [timeEntryId], references: [id])
-  expense   Expense?   @relation(fields: [expenseId], references: [id])
+  @@index([invoiceId])
+  @@map("invoice_items")
 }
 
-model Payment {
-  id        BigInt   @id @default(autoincrement())
-  invoiceId BigInt
-  amount    Decimal
-  paidAt    DateTime
+model PaymentProof {
+  id            String             @id @default(uuid())
+  invoiceId      String
+  invoice        Invoice            @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  paymentDate    DateTime
+  amountPaid     Int
+  paymentMethod  String?
+  referenceNo    String?
+  notes          String?            @db.Text
+  fileUrl        String?
+  status         PaymentProofStatus @default(PENDING)
+  verifiedBy     String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
 
-  invoice Invoice @relation(fields: [invoiceId], references: [id])
+  @@index([invoiceId])
+  @@index([status])
+  @@index([paymentDate])
+  @@map("payment_proofs")
 }
 
-model BankAccount {
-  id             BigInt @id @default(autoincrement())
-  organizationId BigInt
-  bankName       String
-  accountNumber  String
+model DepositAccount {
+  id                  String            @id @default(uuid())
+  clientId            String
+  client              Contact           @relation("ContactDepositAccounts", fields: [clientId], references: [id], onDelete: Cascade)
+  matterId            String?
+  matter              Matter?           @relation("MatterDepositAccounts", fields: [matterId], references: [id], onDelete: SetNull)
+  amount              Int               @default(0)
+  refundedAmount      Int               @default(0)
+  lastTransactionDate DateTime
+  paymentMethod       String?
+  referenceNo         String?
+  description         String?           @db.Text
+  lastActionType      DepositActionType @default(ADD)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id])
+  @@index([clientId])
+  @@index([matterId])
+  @@index([lastTransactionDate])
+  @@map("deposit_accounts")
 }
 
-////////////////////////////////////////////////////
-/// AUDIT & SYSTEM
-////////////////////////////////////////////////////
 
-model ActivityLog {
-  id             BigInt   @id @default(autoincrement())
-  organizationId BigInt
-  userId         BigInt?
-  entity         String
-  entityId       BigInt
-  action         String
-  createdAt      DateTime @default(now())
+model Event {
+  id          String   @id @default(uuid())
+  title       String
+  categoryId  String
+  category    EventCategory @relation(fields: [categoryId], references: [id])
+  location    String?
+  startTime   DateTime
+  endTime     DateTime
+  description String?  @db.Text
+  
+  // Relasi berdasarkan UI "Event Relation"
+  matterId    String?
+  matter      Matter?  @relation(fields: [matterId], references: [id])
+  
+  notification String? // Contoh: "15 minutes before"
+  attendees    String? // Bisa disimpan sebagai JSON string atau string biasa
+  repeat       String? // Contoh: "Daily", "Weekly"
+  hyperlink    String?
+  fileUrl      String? // Untuk Upload File di UI
 
-  organization Organization @relation(fields: [organizationId], references: [id])
-  user         User?        @relation(fields: [userId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("events")
 }
 
-model Notification {
-  id      BigInt    @id @default(autoincrement())
-  userId  BigInt
-  message String
-  readAt  DateTime?
+model EventCategory {
+  id     String  @id @default(uuid())
+  name   String  @unique // Contoh: "Sidang", "Meeting"
+  color  String? // Untuk label warna di kalender
+  events Event[]
 
-  user User @relation(fields: [userId], references: [id])
+  @@map("event_categories")
 }
